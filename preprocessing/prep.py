@@ -31,8 +31,8 @@ class Prep:
         self.enti_r = route + 'entities.txt'
         self.kb_r = route + 'movie_kb.txt'
         self.qa_r = route + 'task1_qa/'
-        self.recs_r = route + 'task2_resc/'
-        self.pattern = pattern = re.compile(r'\w+_\w+')
+        self.recs_r = route + 'task2_recs/'
+        self.pattern = re.compile(r'\w+_\w+')
     
     def load_dict(self):
         in_list = open(self.dict_r, 'r').readlines()
@@ -46,16 +46,16 @@ class Prep:
         entities = [x.strip('\n') for x in in_list]
         d_enti = [(x, str(i)) for i, x in enumerate(entities)]
         self.d_enti = dict(d_enti)
-        self.d_words_all = self.d_words.copy()
-        n_w = len(self.d_words)
-        for enti in self.d_enti:
-            self.d_words_all[enti] = str(n_w)
-            n_w += 1
-        d_enti_dict = [(x, self.d_words_all[x]) for x in entities]
+        # self.d_words_all = self.d_words.copy()
+        # n_w = len(self.d_words)
+        # for enti in self.d_enti:
+        #     self.d_words_all[enti] = 'entity%s' % str(n_w)
+        #     n_w += 1
+        d_enti_dict = [(x.lower(), self.d_words[x.lower()]) for x in entities]
         self.d_enti_dict = dict(d_enti_dict)
         return self.d_enti, self.d_enti_dict
     
-    def index_line(self, line):
+    def index_line_kb(self, line):
         if line == '':
             return ''
         if 'plot' in line:
@@ -73,28 +73,86 @@ class Prep:
             return ''
         return ' '.join(enti_rela_index + ans_index) + '\n'
     
+    def index_line_qa(self, line):
+        if line == '':
+            return ''
+        line = line[2:]#.replace(',', '')
+        ques, ans = line.strip('\n').split('?\t')
+        q_words = ques.lower().split(' ')
+        q_cache = []
+        i = 0
+        search_range = range(10)
+        search_range.reverse()
+        while i < len(q_words):
+            word = q_words[i]
+            s = 0
+            for j in search_range:
+                if i + j >= len(q_words):
+                    continue
+                query = ' '.join(q_words[i : i + j + 1]).strip(',')
+                # if 'Jane?' in line:
+                #     print(query)
+                if query in self.d_enti_dict:
+                    # print(query)
+                    s = 1
+                    i = i + j
+                    break
+            i += 1
+            if s == 0:
+                q_cache.append(self.d_words[word.replace(',', '')])
+            else:
+                q_cache.append(self.d_enti_dict[query])
+        ques = ' '.join(q_cache)
+        ans_enti = ans.split(', ')
+        try:
+            ans_idx = ' '.join([self.d_enti[x] for x in ans_enti])
+        except:
+            return ''
+        text = '%s ? %s\n' % (ques, ans_idx)
+        return text
+    
+    def index_line_recs(self, line, movies):
+        # print(line)
+        line = line[2:].strip('\n')
+        query, recs = line.split('?\t')
+        q_words = query.split(' ')
+        # query_idx = [self.d_enti[x] for x in query_enti]
+        # text = '%s %s' % (' '.join(query_idx), self.d_enti[recs])
+        search_range = range(6)
+        search_range.reverse()
+        i = 0
+        query_idx = []
+        while i < len(q_words):
+            for j in search_range:
+                if i + j >= len(q_words):
+                    continue
+                query = ' '.join(q_words[i : i + j + 1]).strip(',')
+                if query in movies:
+                    query_idx.append(str(movies[query.decode('utf-8')]))
+                    i = i + j
+                    break
+            i += 1
+        return '%s %s\n' % (' '.join(query_idx), str(movies[recs.decode('utf-8')]))
+
     def load_kb(self):
         text = open(self.kb_r, 'r').read()
         in_list = text.split('\n')
         self.d_enti_rela, self.d_rela = add_relation(text, self.d_enti)
-        # print(in_list[0])
-        # text = self.index_line(in_list[0])
-        index_list = [self.index_line(line) for line in in_list]
+        index_list = [self.index_line_kb(line) for line in in_list]
         text = ''.join(index_list)
-        # text = str_rep(text, self.d_enti_dict)
-        # text = str_rep(text, {',': ' ,', '...': '', '.': ' .', ':': ' :', ';': ' ;'})
-        # text = str_rep(text, self.d_words)
-        # text = text.replace('entity', '')
         return text
     
-    def load_qa(self):
-        pass
-        text = open(self.qa_r, 'r').read()
-        text = text.replace('\n', '')
-        in_list = text.split('1 ')[1:]
+    def load_qa(self, data):
+        in_list = open(self.qa_r + data, 'r').readlines()
+        # text = self.index_line_qa(in_list[0])
+        text = ''.join([self.index_line_qa(line) for line in in_list])
+        return text
     
-    def load_recs(self):
-        pass
+    def load_recs(self, data):
+        movies = json.load(open('data/movie_name_dict.json', 'rb'))
+        in_list = open(self.recs_r + data, 'r').readlines()
+        text = ''.join([self.index_line_recs(line, movies) for line in in_list])
+        return text
     
     def save_dict(self, config):
         if config == 'json':
