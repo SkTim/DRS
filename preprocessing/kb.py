@@ -29,7 +29,7 @@ class KB:
             enti = [enti]
         else:
             enti = enti.split(', ')
-        return (movie, rela, enti)
+        return (movie.encode('utf-8'), rela, enti)
     
     def build_kb(self):
         self.kb = {}
